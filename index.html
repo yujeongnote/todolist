@@ -100,6 +100,16 @@
     .chip-del { cursor: pointer; color: #a78bfa; font-size: 11px; line-height: 1; }
     .chip-del:hover { color: #f87171; }
 
+    /* 그룹 필터 */
+    .group-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .gf-btn {
+      padding: 5px 14px; border: 1.5px solid #e2e8f0; border-radius: 20px;
+      background: #f8fafc; color: #64748b; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .gf-btn:hover { border-color: #a78bfa; color: #5b21b6; }
+    .gf-btn.active { background: #ede9fe; border-color: #a78bfa; color: #5b21b6; }
+
     /* 상태 탭 */
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tab {
@@ -195,6 +205,11 @@
         </div>
       </div>
 
+      <!-- 그룹 필터 -->
+      <div class="group-filter" id="groupFilter">
+        <button class="gf-btn active" onclick="setGroupFilter('', this)">전체</button>
+      </div>
+
       <div class="tabs">
         <div class="tab active" onclick="setTab('all', this)">전체</div>
         <div class="tab" onclick="setTab('active', this)">진행중</div>
@@ -209,6 +224,7 @@
     let todos = [];
     let groups = [];
     let currentTab = 'all';
+    let currentGroup = '';
     let nextId = 1;
 
     const input = document.getElementById('todoInput');
@@ -254,6 +270,20 @@
 
       groupSelect.innerHTML = '<option value="">그룹 없음</option>' +
         groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+
+      const filter = document.getElementById('groupFilter');
+      filter.innerHTML =
+        `<button class="gf-btn ${currentGroup === '' ? 'active' : ''}" onclick="setGroupFilter('', this)">전체</button>` +
+        groups.map(g =>
+          `<button class="gf-btn ${currentGroup === g ? 'active' : ''}" onclick="setGroupFilter('${escapeHtml(g)}', this)">${escapeHtml(g)}</button>`
+        ).join('');
+    }
+
+    function setGroupFilter(group, el) {
+      currentGroup = group;
+      document.querySelectorAll('.gf-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      render();
     }
 
     function setTab(tab, el) {
@@ -306,7 +336,11 @@
       const remaining = todos.filter(t => !t.done).length;
       document.getElementById('counter').textContent = `남은 일정: ${remaining}개`;
 
-      const filtered = todos.filter(t => currentTab === 'all' || (currentTab === 'active' ? !t.done : t.done));
+      const filtered = todos.filter(t => {
+        const statusOk = currentTab === 'all' || (currentTab === 'active' ? !t.done : t.done);
+        const groupOk  = currentGroup === '' || t.group === currentGroup;
+        return statusOk && groupOk;
+      });
       const sorted = sortByTime(filtered);
       const list = document.getElementById('todoList');
 
