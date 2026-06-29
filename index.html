@@ -8,17 +8,38 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      min-height: 100vh; display: flex; justify-content: center;
-      background: #f0f2f5; font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #dde1ea; font-family: 'Segoe UI', sans-serif;
     }
 
-    .card { width: 520px; background: #fff; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); overflow: hidden; }
+    .phone-frame {
+      width: 390px;
+      height: 780px;
+      background: #fff;
+      border-radius: 48px;
+      box-shadow: 0 0 0 10px #1a1a2e, 0 24px 64px rgba(0,0,0,0.35);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
 
-    .card-header { background: #4f46e5; padding: 28px 32px 20px; color: #fff; }
-    .card-header h1 { font-size: 22px; font-weight: 700; }
-    .counter { margin-top: 6px; font-size: 13px; opacity: 0.8; }
+    .phone-notch {
+      position: absolute;
+      top: 0; left: 50%; transform: translateX(-50%);
+      width: 120px; height: 28px;
+      background: #1a1a2e;
+      border-radius: 0 0 20px 20px;
+      z-index: 10;
+    }
 
-    .card-body { padding: 24px 32px 32px; }
+    .card { width: 100%; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .card-header { background: #4f46e5; padding: 44px 24px 16px; color: #fff; flex-shrink: 0; }
+    .card-header h1 { font-size: 20px; font-weight: 700; }
+    .counter { margin-top: 4px; font-size: 12px; opacity: 0.8; }
+
+    .card-body { padding: 16px 20px 24px; flex: 1; overflow-y: auto; }
 
     .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
     .input-row { display: flex; gap: 10px; }
@@ -155,6 +176,8 @@
   </style>
 </head>
 <body>
+  <div class="phone-frame">
+  <div class="phone-notch"></div>
   <div class="card">
     <div class="card-header">
       <h1>Todo List</h1>
@@ -191,9 +214,7 @@
       </div>
 
       <!-- 그룹 필터 -->
-      <div class="group-filter" id="groupFilter">
-        <button class="gf-btn active" onclick="setGroupFilter('', this)">전체</button>
-      </div>
+      <div class="group-filter" id="groupFilter" style="display:none;"></div>
 
       <div class="tabs">
         <div class="tab active" onclick="setTab('all', this)">전체</div>
@@ -203,6 +224,7 @@
 
       <div class="todo-list" id="todoList"></div>
     </div>
+  </div>
   </div>
 
   <script>
@@ -256,11 +278,17 @@
         groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
 
       const filter = document.getElementById('groupFilter');
-      filter.innerHTML =
-        `<button class="gf-btn ${currentGroup === '' ? 'active' : ''}" onclick="setGroupFilter('', this)">전체</button>` +
-        groups.map(g =>
-          `<button class="gf-btn ${currentGroup === g ? 'active' : ''}" onclick="setGroupFilter('${escapeHtml(g)}', this)">${escapeHtml(g)}</button>`
-        ).join('');
+      if (groups.length === 0) {
+        filter.innerHTML = '';
+        filter.style.display = 'none';
+      } else {
+        filter.style.display = 'flex';
+        filter.innerHTML =
+          `<button class="gf-btn ${currentGroup === '' ? 'active' : ''}" onclick="setGroupFilter('', this)">전체</button>` +
+          groups.map(g =>
+            `<button class="gf-btn ${currentGroup === g ? 'active' : ''}" onclick="setGroupFilter('${escapeHtml(g)}', this)">${escapeHtml(g)}</button>`
+          ).join('');
+      }
     }
 
     function setGroupFilter(group, el) {
