@@ -50,6 +50,20 @@
     }
     .btn-add:hover { background: #4338ca; }
 
+    .group-row { display: flex; align-items: center; gap: 10px; }
+    .group-row label { font-size: 13px; color: #64748b; white-space: nowrap; }
+    .group-row select {
+      flex: 1; padding: 8px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      font-size: 13px; color: #1e293b; background: #fff;
+      outline: none; cursor: pointer; transition: border-color 0.2s;
+    }
+    .group-row select:focus { border-color: #4f46e5; }
+
+    .todo-group-badge {
+      padding: 1px 8px; background: #ede9fe; color: #5b21b6;
+      border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap;
+    }
+
     /* 그룹 관리 */
     .group-section { margin-bottom: 16px; border: 1.5px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
 
@@ -160,6 +174,10 @@
           <label for="timeInput">시간</label>
           <input type="time" id="timeInput" />
         </div>
+        <div class="group-row">
+          <label for="groupSelect">그룹</label>
+          <select id="groupSelect"><option value="">그룹 없음</option></select>
+        </div>
       </div>
 
       <!-- 그룹 관리 -->
@@ -196,6 +214,7 @@
     const input = document.getElementById('todoInput');
     const descInput = document.getElementById('descInput');
     const timeInput = document.getElementById('timeInput');
+    const groupSelect = document.getElementById('groupSelect');
 
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addTodo(); });
     document.getElementById('groupInput').addEventListener('keydown', e => { if (e.key === 'Enter') addGroup(); });
@@ -232,6 +251,9 @@
               ${escapeHtml(g)}
               <span class="chip-del" onclick="deleteGroup('${escapeHtml(g)}')" title="삭제">✕</span>
             </span>`).join('');
+
+      groupSelect.innerHTML = '<option value="">그룹 없음</option>' +
+        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
     }
 
     function setTab(tab, el) {
@@ -243,8 +265,8 @@
     function addTodo() {
       const text = input.value.trim();
       if (!text) return;
-      todos.push({ id: nextId++, text, desc: descInput.value.trim(), time: timeInput.value, group: '', done: false, completedAt: null });
-      input.value = ''; descInput.value = ''; timeInput.value = '';
+      todos.push({ id: nextId++, text, desc: descInput.value.trim(), time: timeInput.value, group: groupSelect.value, done: false, completedAt: null });
+      input.value = ''; descInput.value = ''; timeInput.value = ''; groupSelect.value = '';
       render();
     }
 
@@ -300,7 +322,10 @@
         <div class="todo-item ${t.done ? 'done' : ''}">
           <input type="radio" ${t.done ? 'checked' : ''} onclick="toggleTodo(${t.id})" />
           <div class="todo-info">
-            <span class="todo-text">${escapeHtml(t.text)}</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="todo-text">${escapeHtml(t.text)}</span>
+              ${t.group ? `<span class="todo-group-badge">${escapeHtml(t.group)}</span>` : ''}
+            </div>
             ${t.desc ? `<span class="todo-desc">${escapeHtml(t.desc)}</span>` : ''}
             <div class="todo-meta">
               ${t.time ? `<span class="todo-time">${formatTime(t.time)}</span>` : ''}
