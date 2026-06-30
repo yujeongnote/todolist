@@ -142,9 +142,17 @@
     .empty-icon { font-size: 36px; margin-bottom: 10px; }
     .empty-text { color: #64748b; font-size: 14px; font-weight: 500; }
     .empty-sub { color: #94a3b8; font-size: 12px; margin-top: 4px; }
+
+    .loading-overlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,0.85);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; color: #64748b; z-index: 100;
+    }
+    .loading-overlay.hidden { display: none; }
   </style>
 </head>
 <body>
+  <div class="loading-overlay" id="loadingOverlay">데이터를 불러오는 중...</div>
   <div class="card">
     <div class="card-header">
       <h1>Todo List</h1>
@@ -154,7 +162,7 @@
       <div class="input-group">
         <div class="input-row">
           <input type="text" id="todoInput" placeholder="새 일정을 입력하세요" />
-          <button class="btn-add" onclick="addTodo()">+ 그룹 추가</button>
+          <button class="btn-add" onclick="addTodo()">+ 일정 추가</button>
         </div>
         <div class="desc-row">
           <textarea id="descInput" rows="2" placeholder="설명 (선택)"></textarea>
@@ -187,12 +195,18 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { createClient } from '@supabase/supabase-js'
+
+    const supabase = createClient(
+      import.meta.env.VITE_SUPABASE_URL,
+      import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+    )
+
     let todos = [];
     let groups = [];
     let currentTab = 'all';
     let currentGroup = '';
-    let nextId = 1;
 
     const input = document.getElementById('todoInput');
     const descInput = document.getElementById('descInput');
@@ -201,16 +215,42 @@
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addTodo(); });
     document.getElementById('groupInput').addEventListener('keydown', e => { if (e.key === 'Enter') addGroup(); });
 
-    function addGroup() {
+    async function loadData() {
+      const [{ data: todosData, error: todosErr }, { data: groupsData, error: groupsErr }] = await Promise.all([
+        supabase.from('todos').select('*').order('created_at'),
+        supabase.from('groups').select('*').order('created_at')
+      ]);
+      if (todosErr || groupsErr) {
+        alert('데이터 로딩 실패: ' + (todosErr || groupsErr).message);
+        return;
+      }
+      todos = (todosData || []).map(t => ({
+        id: t.id, text: t.text, desc: t.description || '',
+        group: t.group_name || '', done: t.done, completedAt: t.completed_at
+      }));
+      groups = (groupsData || []).map(g => g.name);
+      renderGroups();
+      render();
+    }
+
+    async function addGroup() {
       const gInput = document.getElementById('groupInput');
       const name = gInput.value.trim();
       if (!name || groups.includes(name)) return;
+      const { error } = await supabase.from('groups').insert({ name });
+      if (error) { alert('그룹 추가 실패: ' + error.message); return; }
       groups.push(name);
       gInput.value = '';
       renderGroups();
     }
 
-    function deleteGroup(name) {
+    async function deleteGroup(name) {
+      const { error } = await supabase.from('groups').delete().eq('name', name);
+      if (error) { alert('그룹 삭제 실패: ' + error.message); return; }
+      const affected = todos.filter(t => t.group === name).map(t => t.id);
+      if (affected.length > 0) {
+        await supabase.from('todos').update({ group_name: '' }).in('id', affected);
+      }
       groups = groups.filter(g => g !== name);
       todos.forEach(t => { if (t.group === name) t.group = ''; });
       renderGroups();
@@ -259,31 +299,47 @@
     function setTab(tab, el) {
       currentTab = tab;
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      el.classList.add('active'); render();
+      el.classList.add('active');
+      render();
     }
 
-    function addTodo() {
+    async function addTodo() {
       const text = input.value.trim();
       if (!text) return;
-      todos.push({ id: nextId++, text, desc: descInput.value.trim(), group: groupSelect.value, done: false, completedAt: null });
+      const { data, error } = await supabase
+        .from('todos')
+        .insert({ text, description: descInput.value.trim(), group_name: groupSelect.value, done: false })
+        .select()
+        .single();
+      if (error) { alert('추가 실패: ' + error.message); return; }
+      todos.push({ id: data.id, text: data.text, desc: data.description, group: data.group_name, done: data.done, completedAt: data.completed_at });
       input.value = ''; descInput.value = ''; groupSelect.value = '';
       render();
     }
 
-    function toggleTodo(id) {
+    async function toggleTodo(id) {
       const todo = todos.find(t => t.id === id);
-      if (todo) {
-        todo.done = !todo.done;
-        if (todo.done) {
-          const now = new Date();
-          const pad = n => String(n).padStart(2,'0');
-          todo.completedAt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        } else { todo.completedAt = null; }
+      if (!todo) return;
+      const newDone = !todo.done;
+      let completedAt = null;
+      if (newDone) {
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        completedAt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
       }
+      const { error } = await supabase.from('todos').update({ done: newDone, completed_at: completedAt }).eq('id', id);
+      if (error) { alert('수정 실패: ' + error.message); return; }
+      todo.done = newDone;
+      todo.completedAt = completedAt;
       render();
     }
 
-    function deleteTodo(id) { todos = todos.filter(t => t.id !== id); render(); }
+    async function deleteTodo(id) {
+      const { error } = await supabase.from('todos').delete().eq('id', id);
+      if (error) { alert('삭제 실패: ' + error.message); return; }
+      todos = todos.filter(t => t.id !== id);
+      render();
+    }
 
     function escapeHtml(str) {
       return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -298,10 +354,9 @@
         const groupOk  = currentGroup === '' || t.group === currentGroup;
         return statusOk && groupOk;
       });
-      const sorted = filtered;
       const list = document.getElementById('todoList');
 
-      if (sorted.length === 0) {
+      if (filtered.length === 0) {
         const allDone = todos.length > 0 && todos.every(t => t.done);
         list.innerHTML = allDone
           ? `<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">오늘 일정이 모두 완료되었습니다.</div><div class="empty-sub">수고하셨습니다!</div></div>`
@@ -309,9 +364,9 @@
         return;
       }
 
-      list.innerHTML = sorted.map(t => `
+      list.innerHTML = filtered.map(t => `
         <div class="todo-item ${t.done ? 'done' : ''}">
-          <input type="radio" ${t.done ? 'checked' : ''} onclick="toggleTodo(${t.id})" />
+          <input type="radio" ${t.done ? 'checked' : ''} onclick="toggleTodo('${t.id}')" />
           <div class="todo-info">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span class="todo-text">${escapeHtml(t.text)}</span>
@@ -320,12 +375,21 @@
             ${t.desc ? `<span class="todo-desc">${escapeHtml(t.desc)}</span>` : ''}
             ${t.done && t.completedAt ? `<div class="todo-meta"><span class="todo-completed-at">완료: ${t.completedAt}</span></div>` : ''}
           </div>
-          <button class="btn-delete" onclick="deleteTodo(${t.id})" title="삭제">✕</button>
+          <button class="btn-delete" onclick="deleteTodo('${t.id}')" title="삭제">✕</button>
         </div>`).join('');
     }
 
-    renderGroups();
-    render();
+    // 모듈 스코프 함수를 인라인 onclick에서 호출할 수 있도록 window에 노출
+    window.addTodo = addTodo;
+    window.addGroup = addGroup;
+    window.deleteGroup = deleteGroup;
+    window.setGroupFilter = setGroupFilter;
+    window.setTab = setTab;
+    window.toggleTodo = toggleTodo;
+    window.deleteTodo = deleteTodo;
+
+    await loadData();
+    document.getElementById('loadingOverlay').classList.add('hidden');
   </script>
 </body>
 </html>
