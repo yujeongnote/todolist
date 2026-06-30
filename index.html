@@ -149,14 +149,69 @@
       font-size: 14px; color: #64748b; z-index: 100;
     }
     .loading-overlay.hidden { display: none; }
+
+    .btn-logout {
+      background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+      color: #fff; padding: 5px 12px; border-radius: 6px;
+      font-size: 12px; cursor: pointer; transition: background 0.2s; white-space: nowrap;
+    }
+    .btn-logout:hover { background: rgba(255,255,255,0.35); }
+
+    .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
+    .auth-tab {
+      flex: 1; padding: 10px 0; background: none; border: none; border-bottom: 2px solid transparent;
+      font-size: 14px; font-weight: 600; color: #64748b; cursor: pointer;
+      margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
+    }
+    .auth-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+    .auth-input {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      font-size: 14px; outline: none; margin-bottom: 10px; transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .auth-input:focus { border-color: #4f46e5; }
+    .auth-error  { color: #ef4444; font-size: 13px; margin-bottom: 10px; min-height: 18px; }
+    .auth-success{ color: #22c55e; font-size: 13px; margin-bottom: 10px; min-height: 18px; }
+    .auth-submit {
+      width: 100%; padding: 11px; background: #4f46e5; color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .auth-submit:hover { background: #4338ca; }
+    .auth-submit:disabled { background: #a5b4fc; cursor: not-allowed; }
   </style>
 </head>
 <body>
   <div class="loading-overlay" id="loadingOverlay">데이터를 불러오는 중...</div>
-  <div class="card">
+
+  <!-- 로그인/회원가입 카드 -->
+  <div class="card" id="authCard" style="display:none;">
     <div class="card-header">
       <h1>Todo List</h1>
-      <div class="counter" id="counter">남은 일정: 0개 입니다.</div>
+      <div class="counter">로그인하여 시작하세요</div>
+    </div>
+    <div class="card-body">
+      <div class="auth-tabs">
+        <button id="loginTabBtn" class="auth-tab active" onclick="switchAuthMode('login')">로그인</button>
+        <button id="signupTabBtn" class="auth-tab" onclick="switchAuthMode('signup')">회원가입</button>
+      </div>
+      <input type="email" id="authEmail" class="auth-input" placeholder="이메일" />
+      <input type="password" id="authPassword" class="auth-input" placeholder="비밀번호" />
+      <div id="authMsg"></div>
+      <button id="authSubmitBtn" class="auth-submit" onclick="handleAuth()">로그인</button>
+    </div>
+  </div>
+
+  <!-- 할일 앱 카드 -->
+  <div class="card" id="appCard" style="display:none;">
+    <div class="card-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <h1>Todo List</h1>
+          <div class="counter" id="counter">남은 일정: 0개</div>
+        </div>
+        <button class="btn-logout" onclick="signOut()">로그아웃</button>
+      </div>
     </div>
     <div class="card-body">
       <div class="input-group">
@@ -193,7 +248,7 @@
 
       <div class="todo-list" id="todoList"></div>
     </div>
-  </div>
+  </div><!-- /#appCard -->
 
   <script type="module">
     import { createClient } from '@supabase/supabase-js'
@@ -203,10 +258,12 @@
       import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
     )
 
+    let currentUser = null;
     let todos = [];
     let groups = [];
     let currentTab = 'all';
     let currentGroup = '';
+    let authMode = 'login';
 
     const input = document.getElementById('todoInput');
     const descInput = document.getElementById('descInput');
@@ -214,11 +271,67 @@
 
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addTodo(); });
     document.getElementById('groupInput').addEventListener('keydown', e => { if (e.key === 'Enter') addGroup(); });
+    document.getElementById('authEmail').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('authPassword').focus(); });
+    document.getElementById('authPassword').addEventListener('keydown', e => { if (e.key === 'Enter') handleAuth(); });
 
+    // ── 인증 ─────────────────────────────────────
+    function switchAuthMode(mode) {
+      authMode = mode;
+      document.getElementById('loginTabBtn').classList.toggle('active', mode === 'login');
+      document.getElementById('signupTabBtn').classList.toggle('active', mode === 'signup');
+      document.getElementById('authSubmitBtn').textContent = mode === 'login' ? '로그인' : '회원가입';
+      const msg = document.getElementById('authMsg');
+      msg.textContent = '';
+      msg.className = '';
+    }
+
+    async function handleAuth() {
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      const msg = document.getElementById('authMsg');
+      const btn = document.getElementById('authSubmitBtn');
+
+      if (!email || !password) { msg.className = 'auth-error'; msg.textContent = '이메일과 비밀번호를 입력하세요.'; return; }
+
+      btn.disabled = true;
+      msg.textContent = '';
+
+      if (authMode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) { msg.className = 'auth-error'; msg.textContent = error.message; btn.disabled = false; }
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        btn.disabled = false;
+        if (error) { msg.className = 'auth-error'; msg.textContent = error.message; return; }
+        msg.className = 'auth-success';
+        msg.textContent = '확인 이메일을 발송했습니다. 이메일을 확인 후 로그인해주세요.';
+      }
+    }
+
+    async function signOut() {
+      await supabase.auth.signOut();
+    }
+
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      currentUser = session?.user ?? null;
+      if (currentUser) {
+        document.getElementById('authCard').style.display = 'none';
+        document.getElementById('appCard').style.display = 'block';
+        await loadData();
+      } else {
+        document.getElementById('authCard').style.display = 'block';
+        document.getElementById('appCard').style.display = 'none';
+        todos = [];
+        groups = [];
+      }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    });
+
+    // ── 데이터 ────────────────────────────────────
     async function loadData() {
       const [{ data: todosData, error: todosErr }, { data: groupsData, error: groupsErr }] = await Promise.all([
-        supabase.from('todos').select('*').order('created_at'),
-        supabase.from('groups').select('*').order('created_at')
+        supabase.from('todos').select('*').eq('user_id', currentUser.id).order('created_at'),
+        supabase.from('groups').select('*').eq('user_id', currentUser.id).order('created_at')
       ]);
       if (todosErr || groupsErr) {
         alert('데이터 로딩 실패: ' + (todosErr || groupsErr).message);
@@ -237,7 +350,7 @@
       const gInput = document.getElementById('groupInput');
       const name = gInput.value.trim();
       if (!name || groups.includes(name)) return;
-      const { error } = await supabase.from('groups').insert({ name });
+      const { error } = await supabase.from('groups').insert({ name, user_id: currentUser.id });
       if (error) { alert('그룹 추가 실패: ' + error.message); return; }
       groups.push(name);
       gInput.value = '';
@@ -245,7 +358,7 @@
     }
 
     async function deleteGroup(name) {
-      const { error } = await supabase.from('groups').delete().eq('name', name);
+      const { error } = await supabase.from('groups').delete().eq('name', name).eq('user_id', currentUser.id);
       if (error) { alert('그룹 삭제 실패: ' + error.message); return; }
       const affected = todos.filter(t => t.group === name).map(t => t.id);
       if (affected.length > 0) {
@@ -308,7 +421,7 @@
       if (!text) return;
       const { data, error } = await supabase
         .from('todos')
-        .insert({ text, description: descInput.value.trim(), group_name: groupSelect.value, done: false })
+        .insert({ text, description: descInput.value.trim(), group_name: groupSelect.value, done: false, user_id: currentUser.id })
         .select()
         .single();
       if (error) { alert('추가 실패: ' + error.message); return; }
@@ -379,7 +492,6 @@
         </div>`).join('');
     }
 
-    // 모듈 스코프 함수를 인라인 onclick에서 호출할 수 있도록 window에 노출
     window.addTodo = addTodo;
     window.addGroup = addGroup;
     window.deleteGroup = deleteGroup;
@@ -387,9 +499,9 @@
     window.setTab = setTab;
     window.toggleTodo = toggleTodo;
     window.deleteTodo = deleteTodo;
-
-    await loadData();
-    document.getElementById('loadingOverlay').classList.add('hidden');
+    window.handleAuth = handleAuth;
+    window.switchAuthMode = switchAuthMode;
+    window.signOut = signOut;
   </script>
 </body>
 </html>
